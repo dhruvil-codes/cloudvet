@@ -41,6 +41,7 @@ packages = ["cloudvet"]
 
 [tool.hatch.build.targets.sdist]
 include = ["cloudvet", "tests", "docs", "demo_rust", "README.md", "LICENSE", "pyproject.toml", ".env.example"]
+exclude = ["demo_rust/target", "demo_rust/target/**", "demo_rust/.git", "demo_rust/.git/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
