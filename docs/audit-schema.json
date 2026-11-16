@@ -1,0 +1,154 @@
+{
+  "$defs": {
+    "Finding": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "line": {
+          "minimum": 1,
+          "title": "Line",
+          "type": "integer"
+        },
+        "severity": {
+          "default": "info",
+          "enum": [
+            "info",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "status": {
+          "default": "needs_validation",
+          "enum": [
+            "confirmed",
+            "needs_validation",
+            "rejected"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "evidence": {
+          "title": "Evidence",
+          "type": "string"
+        },
+        "recommendation": {
+          "title": "Recommendation",
+          "type": "string"
+        },
+        "blocker": {
+          "default": "No trust-boundary or dynamic validation performed.",
+          "title": "Blocker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "path",
+        "line",
+        "evidence",
+        "recommendation"
+      ],
+      "title": "Finding",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "cloudvet.audit.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "quick",
+        "full"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "run_status": {
+      "const": "incomplete",
+      "default": "incomplete",
+      "title": "Run Status",
+      "type": "string"
+    },
+    "phases": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Phases",
+      "type": "object"
+    },
+    "scanned_files": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Scanned Files",
+      "type": "array"
+    },
+    "skipped_files": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Skipped Files",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "confirmed": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Confirmed",
+      "type": "array"
+    },
+    "needs_validation": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Needs Validation",
+      "type": "array"
+    },
+    "rejected": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Rejected",
+      "type": "array"
+    }
+  },
+  "required": [
+    "mode",
+    "phases",
+    "scanned_files",
+    "skipped_files",
+    "limitations"
+  ],
+  "title": "AuditReport",
+  "type": "object"
+}

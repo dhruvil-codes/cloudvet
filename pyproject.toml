@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cloudvet"
+version = "0.1.0"
+description = "Run tests and verify AI repairs in disposable GMI Cloud sandboxes."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{name = "Dhruvil Mistry"}]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Topic :: Software Development :: Testing",
+]
+dependencies = [
+  "gmi-agentbox-sdk>=0.1.0b6,<0.2",
+  "openai>=1.55.3,<4",
+  "typer>=0.29.0,<1",
+  "rich>=13.7.0,<16",
+  "pydantic>=2.7.0,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.9", "build>=1.2", "twine>=6"]
+
+[project.scripts]
+cloudvet = "cloudvet.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/dhruvil-codes/cloudvet"
+Issues = "https://github.com/dhruvil-codes/cloudvet/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cloudvet"]
+
+[tool.hatch.build.targets.sdist]
+include = ["cloudvet", "tests", "docs", "README.md", "LICENSE", "pyproject.toml", ".env.example"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
