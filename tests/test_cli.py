@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 
 from cloudvet.cli import app
 from cloudvet.config import Settings
-from cloudvet.healer import RepairResult
+from cloudvet.healer import ModelUsage, RepairResult
 
 runner = CliRunner()
 
@@ -65,12 +65,15 @@ def test_fix_prompt_and_local_consent(repository, monkeypatch, answer, applied):
         execution=execution(),
         confidence=1,
         attempts=1,
+        usage=[ModelUsage(model="fixture-model", prompt_tokens=123, completion_tokens=456)],
     )
     monkeypatch.setattr("cloudvet.cli.SandboxManager", lambda settings: manager)
     monkeypatch.setattr("cloudvet.cli.MaaS", lambda settings: models)
     monkeypatch.setattr("cloudvet.cli.Healer", lambda *args: healer)
     result = runner.invoke(app, ["fix", "--root", str(repository), "--no-install"], input=answer)
     assert result.exit_code == 0, result.stdout
+    assert "fixture-model" in result.stdout and "123" in result.stdout and "456" in result.stdout
+    assert "FAIL" in result.stdout and "PASS" in result.stdout
     assert ("return a + b" in (repository / "app.py").read_text()) is applied
     models.close.assert_called_once()
     manager.session.return_value.__exit__.assert_called_once()

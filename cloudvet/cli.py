@@ -13,7 +13,7 @@ from cloudvet import __version__
 from cloudvet.audit import audit_workspace, write_report
 from cloudvet.config import Settings
 from cloudvet.detector import detect_stack
-from cloudvet.formatters import console, show_diff, show_execution
+from cloudvet.formatters import console, show_diff, show_execution, show_model_usage
 from cloudvet.healer import REMOTE_DIFF, Healer, MaaS, apply_locally
 from cloudvet.sandbox import SandboxManager, Workspace
 
@@ -126,8 +126,8 @@ def fix(
             prepare(manager, sandbox, workspace, stack, install)
             with console.status("Running tests in AgentBox..."):
                 initial = manager.run_command(sandbox, stack.test_command)
+            show_execution(initial)
             if initial.passed:
-                show_execution(initial)
                 console.print("Tests already pass; no repair needed.")
                 return
             baseline = manager.run_command(sandbox, REMOTE_DIFF)
@@ -148,6 +148,7 @@ def fix(
         if json_output:
             json_output.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
         show_execution(result.execution)
+        show_model_usage(result.usage)
         if not result.verified:
             for error in result.errors:
                 console.print(error, markup=False)

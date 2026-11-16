@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 
+from cloudvet.healer import ModelUsage
 from cloudvet.sandbox import ExecutionResult
 
 console = Console()
@@ -27,3 +28,13 @@ def show_execution(result: ExecutionResult) -> None:
 
 def show_diff(diff: str) -> None:
     console.print(Syntax(diff, "diff", word_wrap=True))
+
+
+def show_model_usage(usage: list[ModelUsage]) -> None:
+    if not usage:
+        console.print("No MaaS token usage reported.")
+        return
+    table = Table("MaaS model", "Prompt tokens", "Completion tokens")
+    for call in usage:
+        table.add_row(call.model, str(call.prompt_tokens), str(call.completion_tokens))
+    console.print(table)

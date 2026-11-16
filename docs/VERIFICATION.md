@@ -26,6 +26,36 @@ A separate fixture synthesis check returned a valid diagnosis and a minimal addi
 
 Local live-run artifacts remain under ignored `.cloudvet/` directories. Credentials were supplied through secure input and process environment variables, and were not written to source or committed artifacts.
 
+## Calculator demo retry
+
+The temporary `demo_app/` fixture contains `calculator.py`, `test_calculator.py` and
+`requirements.txt`. Its zero-division test expects `ValueError("Cannot divide by zero")`,
+while the intentionally broken implementation raises `ZeroDivisionError`. The local
+baseline produced exactly **1 failed, 1 passed**.
+
+The real CLI was invoked against this fixture using the supported SDK interface, with
+Flash for triage and an explicit V4-Pro repair override. No command encoding or WAF
+evasion was added.
+
+- `cloudvet check`: exited 2 with `GMI compute HTTP 403: Request failed`.
+  Total workflow wall time was 21.47 seconds.
+- `cloudvet fix calculator.py`: exited 2 with the same HTTP 403 before reaching triage.
+  Total workflow wall time was 16.41 seconds. No local patch was applied.
+- These times include provisioning, API requests and cleanup. No test execution duration
+  was returned by GMI, and neither command reached a cloud test verdict.
+- No MaaS calls were made in these two runs because setup failed before inference.
+- After both runs, the catalog listed **0 active cloudvet templates and 0 active sandboxes**.
+- CLI logs, workflow timings and the cleanup snapshot are retained locally in
+  `.cloudvet/demo-live-20261116/` at the repository root. They are ignored by Git.
+
+Python end-to-end repair remains **BLOCKED**, not passed. GMI must resolve the rejection
+of legitimate authenticated execution requests before this check can be completed.
+An HTTP 403 alone does not establish which WAF rule or shell keyword triggered the block.
+
+The terminal now shows both initial/final repair test verdicts and provider-reported
+MaaS usage for completed repair attempts. All 67 tests, Ruff lint and formatting checks
+passed after these changes. The initial GitHub CI run also completed successfully.
+
 ## Release limits
 
 PyPI publication has not been performed. Full cloud repair acceptance, live audit execution, timeout/interrupt billing reconciliation and a $50 usage target are not complete. No claim is made that $50 has been spent. The account's actual compute/model charges and grant eligibility require billing-console verification.

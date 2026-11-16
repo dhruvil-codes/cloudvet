@@ -128,6 +128,10 @@ A passing test suite is evidence for that suite, not proof of correctness or sec
 
 Increase the sandbox lifetime for dependency setup plus several model turns, for example `CLOUDVET_TIMEOUT_SECONDS=900`. A timed-out suite is not sent through an AI repair cycle.
 
+`fix` prints the initial and final test verdicts with execution durations. Completed repair
+attempts also print a MaaS table containing each call's model, prompt tokens and completion
+tokens. These counts are provider-reported; a setup failure stops before inference.
+
 ## Audit scope and Cloudflare attribution
 
 The audit is a **limited defensive source review** inspired by [Cloudflare's security-audit-skill](https://github.com/cloudflare/security-audit-skill). It is independently implemented, is not affiliated with Cloudflare, and does not vendor the skill or claim compatibility with its report schema.
