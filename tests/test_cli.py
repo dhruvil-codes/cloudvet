@@ -1,12 +1,15 @@
+from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
 from conftest import PATCH, execution
 from typer.testing import CliRunner
 
-from cloudvet.cli import app
+from cloudvet.cli import app, cloud_session
 from cloudvet.config import Settings
+from cloudvet.formatters import Workflow
 from cloudvet.healer import ModelUsage, RepairResult
+from cloudvet.sandbox import SandboxManager
 
 runner = CliRunner()
 
@@ -108,3 +111,23 @@ def test_run_propagates_exit_code(repository, monkeypatch):
     monkeypatch.setattr("cloudvet.cli.SandboxManager", lambda settings: manager)
     result = runner.invoke(app, ["run", "exit 7", "--root", str(repository)])
     assert result.exit_code == 7
+
+
+def test_progress_output_failure_still_deletes_compute(settings, sandbox, monkeypatch):
+    client = MagicMock()
+    client.agents.create.return_value.template_build_status = "ready"
+    client.agents.create.return_value.launch.return_value = sandbox
+    manager = SandboxManager(settings, client)
+
+    @contextmanager
+    def disconnected_output(label):
+        yield
+        if label == "Launch GMI AgentBox v2":
+            raise BrokenPipeError("terminal output closed")
+
+    monkeypatch.setattr("cloudvet.cli.stage", disconnected_output)
+    with pytest.raises(BrokenPipeError):
+        with cloud_session(manager, Workflow()):
+            pytest.fail("Progress output should fail before entering the workflow")
+    sandbox.delete.assert_called_once()
+    client.agents.create.return_value.delete.assert_called_once()

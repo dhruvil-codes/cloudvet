@@ -55,13 +55,19 @@ def safe_workspace_path(name: str) -> bool:
     )
 
 
-def git(root: Path, *args: str, input_bytes: bytes | None = None) -> bytes:
+def git(
+    root: Path, *args: str, input_bytes: bytes | None = None, discover_parent: bool = True
+) -> bytes:
+    environment = os.environ.copy()
+    if not discover_parent:
+        environment["GIT_CEILING_DIRECTORIES"] = str(root.resolve().parent)
     result = subprocess.run(
         ["git", "-c", "core.hooksPath=/dev/null", "-C", str(root), *args],
         input=input_bytes,
         capture_output=True,
         timeout=30,
         check=False,
+        env=environment,
     )
     if result.returncode:
         raise ValueError(result.stderr.decode("utf-8", errors="replace").strip() or "Git failed")
@@ -174,6 +180,7 @@ class SandboxManager:
         )
         self._owned_agents: dict[str, Any] = {}
         self._deadlines: dict[str, float] = {}
+        self.launch_details: dict[str, dict] = {}
 
     def launch_ephemeral_sandbox(self, timeout_seconds: int | None = None) -> Any:
         lifetime = timeout_seconds if timeout_seconds is not None else self.settings.timeout_seconds
@@ -215,6 +222,10 @@ class SandboxManager:
             if owned:
                 self._owned_agents[sandbox.id] = agent
             sandbox.wait_until_running(timeout=lifetime)
+            self.launch_details[sandbox.id] = {
+                "boot_seconds": time.monotonic() - started,
+                "idc": agent.idc or self.settings.default_idc,
+            }
             return sandbox
         except BaseException:
             if sandbox is not None:

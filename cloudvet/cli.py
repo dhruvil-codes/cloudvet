@@ -1,7 +1,7 @@
 """cloudvet command-line entrypoint."""
 
 import os
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -13,7 +13,18 @@ from cloudvet import __version__
 from cloudvet.audit import audit_workspace, write_report
 from cloudvet.config import Settings
 from cloudvet.detector import detect_stack
-from cloudvet.formatters import console, show_diff, show_execution, show_model_usage
+from cloudvet.formatters import (
+    ERROR,
+    Workflow,
+    card,
+    console,
+    note,
+    show_diff,
+    show_execution,
+    show_header,
+    show_model_usage,
+    stage,
+)
 from cloudvet.healer import REMOTE_DIFF, Healer, MaaS, apply_locally
 from cloudvet.sandbox import SandboxManager, Workspace
 
@@ -47,7 +58,7 @@ def errors():
         for name in ("GMI_AGENTBOX_API_KEY", "GMI_MAAS_API_KEY", "GMI_API_KEY"):
             if os.environ.get(name):
                 message = message.replace(os.environ[name], "[redacted]")
-        console.print(f"Error: {message}", style="red", markup=False)
+        console.print(card(message, "CLOUDVET VERDICT: BLOCKED", ERROR))
         raise typer.Exit(2) from None
 
 
@@ -59,21 +70,42 @@ def main(version: Annotated[bool, typer.Option("--version", is_eager=True)] = Fa
 
 
 def snapshot(root: Path) -> Workspace:
-    workspace = Workspace.capture(root)
-    console.print(f"Snapshot: {len(workspace.files)} files; {len(workspace.excluded)} excluded.")
+    with stage("Snapshot working tree"):
+        workspace = Workspace.capture(root)
+    note(f"  {len(workspace.files)} files bundled · {len(workspace.excluded)} excluded")
     return workspace
 
 
 def prepare(manager, sandbox, workspace, stack, install):
-    with console.status("Uploading workspace..."):
+    with stage("Upload workspace and establish baseline"):
         manager.upload_workspace(sandbox, workspace)
     if install:
-        with console.status("Installing dependencies in AgentBox..."):
+        with stage(f"Prepare {stack.package_manager} dependencies"):
             result = manager.run_command(sandbox, stack.install_command)
         if not result.passed:
             show_execution(result)
-            console.print("Dependency setup failed. Tests and repairs did not run.")
+            note("Dependency setup failed. Tests and repairs did not run.")
             raise typer.Exit(2)
+    if stack.language == "Rust":
+        with stage("Inspect Rust toolchain"):
+            toolchain = manager.run_command(sandbox, "rustc --version")
+        if toolchain.passed and toolchain.stdout.startswith("rustc "):
+            return "Rust " + toolchain.stdout.split()[1][:40]
+    return stack.language
+
+
+@contextmanager
+def cloud_session(manager: SandboxManager, workflow: Workflow):
+    with ExitStack() as resources:
+        with stage("Launch GMI AgentBox v2"):
+            sandbox = resources.enter_context(manager.session())
+        details = manager.launch_details.get(sandbox.id, {})
+        if isinstance(details, dict):
+            workflow.boot_seconds = details.get("boot_seconds")
+            workflow.idc = details.get("idc", "")
+        yield sandbox
+        with stage("Delete sandbox and owned template"):
+            resources.close()
 
 
 @app.command()
@@ -84,14 +116,17 @@ def check(
 ):
     """Run the current working tree's tests in GMI Cloud. Local files stay unchanged."""
     with errors():
+        show_header()
         settings, stack = Settings.from_env(), detect_stack(root)
+        workflow = Workflow(stack=stack.language, command=stack.test_command)
         workspace = snapshot(root)
         manager = SandboxManager(settings)
-        with manager.session() as sandbox:
-            prepare(manager, sandbox, workspace, stack, install)
-            with console.status(f"Running {stack.test_command}..."):
+        with cloud_session(manager, workflow) as sandbox:
+            workflow.stack = prepare(manager, sandbox, workspace, stack, install)
+            with stage(f"Run {stack.test_command}"):
                 result = manager.run_command(sandbox, stack.test_command)
-        show_execution(result)
+        show_execution(result, stack=workflow.stack, boot_seconds=workflow.boot_seconds)
+        workflow.summary("PASS" if result.passed else "FAIL", result)
         if json_output:
             json_output.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
         raise typer.Exit(0 if result.passed else 1)
@@ -111,7 +146,9 @@ def fix(
 ):
     """Triage with DeepSeek, synthesize with Sonnet, verify tests, then offer a local patch."""
     with errors():
+        show_header()
         settings, stack = Settings.from_env(), detect_stack(root)
+        workflow = Workflow(stack=stack.language, command=stack.test_command)
         settings.require_inference()
         scope = ""
         if path:
@@ -122,29 +159,37 @@ def fix(
             if scope == ".":
                 scope = ""
         workspace, manager = snapshot(root), SandboxManager(settings)
-        with manager.session() as sandbox:
-            prepare(manager, sandbox, workspace, stack, install)
-            with console.status("Running tests in AgentBox..."):
+        with cloud_session(manager, workflow) as sandbox:
+            workflow.stack = prepare(manager, sandbox, workspace, stack, install)
+            with stage(f"Run {stack.test_command} · baseline"):
                 initial = manager.run_command(sandbox, stack.test_command)
-            show_execution(initial)
+            show_execution(initial, stack=workflow.stack, boot_seconds=workflow.boot_seconds)
             if initial.passed:
-                console.print("Tests already pass; no repair needed.")
-                return
-            baseline = manager.run_command(sandbox, REMOTE_DIFF)
-            if not baseline.passed or baseline.stdout:
-                raise ValueError("Setup or tests modified tracked files; cannot verify a repair")
-            models = MaaS(settings)
-            try:
-                with console.status("Triaging, patching and verifying in AgentBox..."):
-                    result = Healer(settings, manager, models).repair(
-                        sandbox,
-                        workspace,
-                        stack.test_command,
-                        initial,
-                        scope=scope,
+                note("Tests already pass; no repair needed.")
+            else:
+                baseline = manager.run_command(sandbox, REMOTE_DIFF)
+                if not baseline.passed or baseline.stdout:
+                    raise ValueError(
+                        "Setup or tests modified tracked files; cannot verify a repair"
                     )
-            finally:
-                models.close()
+                models = MaaS(settings)
+                try:
+                    with stage("Repair tests in AgentBox"):
+                        result = Healer(settings, manager, models).repair(
+                            sandbox,
+                            workspace,
+                            stack.test_command,
+                            initial,
+                            scope=scope,
+                            on_stage=lambda label: note("    " + label),
+                        )
+                finally:
+                    models.close()
+        if initial.passed:
+            workflow.summary("PASS", initial)
+            if json_output:
+                json_output.write_text(initial.model_dump_json(indent=2) + "\n", encoding="utf-8")
+            return
         if json_output:
             json_output.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
         show_execution(result.execution)
@@ -152,14 +197,18 @@ def fix(
         if not result.verified:
             for error in result.errors:
                 console.print(error, markup=False)
-            console.print("No verified repair. Local files were not changed.")
+            note("No verified repair. Local files were not changed.")
+            workflow.summary("FAIL", result.execution, result.usage, result.attempts)
             raise typer.Exit(1)
         show_diff(result.diff)
+        workflow.summary(
+            "PASS WITH VERIFIED REPAIR", result.execution, result.usage, result.attempts
+        )
         if yes or typer.confirm("Apply this verified diff locally?", default=True):
             apply_locally(result.diff, workspace, scope)
-            console.print("Patch applied. Review the diff before committing.")
+            note("Patch applied. Review the diff before committing.")
         else:
-            console.print("Patch not applied.")
+            note("Patch not applied.")
 
 
 @app.command()
@@ -172,21 +221,27 @@ def audit(
 ):
     """Export a limited source security review. No target code or exploit probes execute."""
     with errors():
+        show_header()
+        workflow = Workflow(command="source review")
         output = output or root / ".cloudvet" / datetime.now(timezone.utc).strftime(
             "audit-%Y%m%d-%H%M%S-%f"
         )
         if output.exists():
             raise FileExistsError(f"Report directory already exists: {output}")
         workspace, manager = snapshot(root), SandboxManager(Settings.from_env())
-        with manager.session() as sandbox:
-            with console.status("Reviewing source in AgentBox..."):
+        with cloud_session(manager, workflow) as sandbox:
+            with stage("Review source in AgentBox"):
                 report = audit_workspace(manager, sandbox, workspace, full=full)
         paths = write_report(report, output)
-        console.print(
-            f"{len(report.needs_validation)} leads. Review incomplete; no exploitability claims."
+        workflow.summary(
+            "REVIEW INCOMPLETE",
+            extra=[
+                ("Leads", str(len(report.needs_validation))),
+                ("Validation", "Source review only; no exploitability claims"),
+            ],
         )
         for path in paths:
-            console.print(str(path.resolve()), markup=False)
+            note(str(path.resolve()))
         raise typer.Exit(1 if report.needs_validation else 0)
 
 
@@ -197,13 +252,15 @@ def run(
 ):
     """Execute an explicit command remotely; poll stdout and stderr until completion."""
     with errors():
+        show_header()
+        workflow = Workflow(command=command)
         workspace, manager = snapshot(root), SandboxManager(Settings.from_env())
-        with manager.session() as sandbox:
+        with cloud_session(manager, workflow) as sandbox:
             manager.upload_workspace(sandbox, workspace)
 
             def stream(name: str, text: str):
                 console.print(text, end="", markup=False, highlight=False)
 
             result = manager.run_command(sandbox, command, on_output=stream)
-        console.print(f"\nExit {result.exit_code} in {result.duration_seconds:.2f}s")
+        workflow.summary("PASS" if result.passed else "FAIL", result)
         raise typer.Exit(result.exit_code if 0 <= result.exit_code <= 255 else 1)

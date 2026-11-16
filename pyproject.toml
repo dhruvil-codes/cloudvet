@@ -40,7 +40,7 @@ Issues = "https://github.com/dhruvil-codes/cloudvet/issues"
 packages = ["cloudvet"]
 
 [tool.hatch.build.targets.sdist]
-include = ["cloudvet", "tests", "docs", "README.md", "LICENSE", "pyproject.toml", ".env.example"]
+include = ["cloudvet", "tests", "docs", "demo_rust", "README.md", "LICENSE", "pyproject.toml", ".env.example"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,7 +4,7 @@ Verified on November 16, 2026 from Windows with Python 3.10.19. This document di
 
 ## Local checks
 
-- 67 unit/integration tests passed. Tests cover detection, real temporary Git repositories, snapshot exclusions, SDK lifecycle failures, timeout cancellation, model patch restrictions, local patch consent and stale-file protection, source scanner execution, and JSON report validation.
+- 75 unit/integration tests passed, including all original 67. Tests cover detection, real temporary Git repositories, snapshot exclusions, SDK lifecycle failures, timeout cancellation, model patch restrictions, local patch consent and stale-file protection, source scanner execution, JSON report validation, terminal rendering, compute cleanup after terminal-output failures, and local repair application in project subdirectories.
 - Ruff lint and formatting passed.
 - An isolated Hatchling build produced the 0.1.0 wheel and sdist; Twine metadata checks passed.
 - The wheel installed in a fresh Python 3.13 environment and its CLI help/version ran outside the repository.
@@ -56,8 +56,51 @@ The terminal now shows both initial/final repair test verdicts and provider-repo
 MaaS usage for completed repair attempts. All 67 tests, Ruff lint and formatting checks
 passed after these changes. The initial GitHub CI run also completed successfully.
 
+## Rust end-to-end verification: PASSED
+
+The included `demo_rust/` fixture contains an intentionally missing zero-divisor check
+in `src/lib.rs`. Local `cargo test` produced **2 passed, 1 failed** with Rust 1.99.1.
+The live runtime image was `docker.io/library/rust:1-bookworm`; its measured compiler
+version was **Rust 1.100.0**. The selected GMI IDC was `us-central-iowa16`, using
+`gmi.sandbox.small`.
+
+- **Cloud check PASSED as a verifier:** `cloudvet check` returned CLI exit 1 and correctly
+  reported Cargo exit 101 with **2 passed, 1 failed**. Launch-to-running time was **1.58s**;
+  the test command took **13.172s**. Total CLI subprocess wall time was **54.375s**.
+- **Autonomous cloud repair PASSED:** `cloudvet fix src/lib.rs` returned CLI exit 0 with
+  a verified diff and **3 passed, 0 failed**. Launch-to-running time was **1.78s**;
+  baseline tests took **11.08s**, and the final passing test command took **2.078s**.
+  Total CLI subprocess wall time was **94.781s**.
+- The repair used **3 bounded attempts**. Git rejected the first two model diffs as
+  corrupt before source application. The third diff added the zero-divisor guard,
+  applied successfully in the sandbox and passed the original test suite.
+- The interactive local-apply prompt was answered `n`. The intentionally broken demo
+  remains unchanged locally; the verified repair is retained in the evidence JSON.
+- **Cleanup PASSED:** after both CLI workflows, GMI listed **0 active cloudvet templates
+  and 0 active sandboxes**. Both workflows ran their deletion stages.
+
+GMI reported the following tokens across all six model calls:
+
+- `deepseek-ai/DeepSeek-V4.1-Flash`: **1,075 prompt / 2,061 completion** tokens.
+- `deepseek-ai/DeepSeek-V4-Pro`: **1,695 prompt / 1,703 completion** tokens.
+- Combined: **2,770 prompt / 3,764 completion** tokens. No dollar cost was inferred.
+
+The terminal's total workflow timers were 52.67s for check and 92.88s for fix. Those timers
+start inside the command; the subprocess wall times above additionally include CLI startup
+and shutdown. Launch-to-running figures are rounded to two decimal places and include
+launch API/polling overhead; they exclude template creation. Test command times include
+SDK execution/polling overhead. None of these numbers is a guaranteed platform latency.
+
+Machine-readable results, token records, the verified diff and the empty cleanup catalog
+are committed in [evidence/rust-live-20261116.json](evidence/rust-live-20261116.json).
+Original terminal transcripts are retained locally under `.cloudvet/rust-live-20261116/`.
+
+The CLI redesign was checked at 40, 80 and 120 columns. Its cards never exceed 80 columns,
+and recorded Rich segments contain no forced background colors. The audit's limitations
+and the Python gateway blocker remain unchanged.
+
 ## Release limits
 
-PyPI publication has not been performed. Full cloud repair acceptance, live audit execution, timeout/interrupt billing reconciliation and a $50 usage target are not complete. No claim is made that $50 has been spent. The account's actual compute/model charges and grant eligibility require billing-console verification.
+PyPI publication has not been performed. Python cloud repair acceptance, live audit execution, timeout/interrupt billing reconciliation and a $50 usage target are not complete. Rust cloud repair has passed as recorded above. No claim is made that $50 has been spent. The account's actual compute/model charges and grant eligibility require billing-console verification.
 
 Security review is a bounded Python source scan. Dynamic exploit validation, outbound-denied execution, independent security verification and Cloudflare report-schema compatibility are not implemented. Reports explicitly remain incomplete.

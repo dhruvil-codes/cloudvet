@@ -1,0 +1,86 @@
+{
+  "date": "2026-11-16",
+  "image": "docker.io/library/rust:1-bookworm",
+  "idc": "us-central-iowa16",
+  "instance_type": "gmi.sandbox.small",
+  "runs": [
+    {
+      "command": "check",
+      "cli_exit_code": 1,
+      "workflow_duration_seconds": 54.375,
+      "verdict": {
+        "command": "cargo test --quiet",
+        "exit_code": 101,
+        "stdout": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 3 tests\ntest_divide_by_zero --- FAILED\n..\nfailures:\n\n---- test_divide_by_zero stdout ----\n\nthread 'test_divide_by_zero' (1653) panicked at tests/test_calculator.rs:15:5:\nExpected error on division by zero\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    test_divide_by_zero\n\ntest result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+        "stderr": "error: test failed, to rerun pass `--test test_calculator`\n",
+        "duration_seconds": 13.171999999998661,
+        "timed_out": false
+      }
+    },
+    {
+      "command": "fix",
+      "cli_exit_code": 0,
+      "workflow_duration_seconds": 94.78100000000268,
+      "verdict": {
+        "verified": true,
+        "diff": "diff --git a/src/lib.rs b/src/lib.rs\nindex c69a923..af01c7c 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,6 +1,9 @@\n pub fn divide(a: f64, b: f64) -> Result<f64, String> {\n-    // BUG: Missing zero check, returns raw division resulting in infinity!\n-    Ok(a / b)\n+    if b == 0.0 {\n+        Err(\"division by zero\".to_string())\n+    } else {\n+        Ok(a / b)\n+    }\n }\n \n pub fn multiply(a: f64, b: f64) -> f64 {\n",
+        "attempts": 3,
+        "confidence": 1.0,
+        "confidence_basis": "Test-suite result only; no guarantee of correctness or security.",
+        "execution": {
+          "command": "cargo test --quiet",
+          "exit_code": 0,
+          "stdout": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 3 tests\n...\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+          "stderr": "",
+          "duration_seconds": 2.0780000000013388,
+          "timed_out": false
+        },
+        "errors": [
+          "error: corrupt patch at line 15",
+          "error: corrupt patch at line 17"
+        ],
+        "usage": [
+          {
+            "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+            "prompt_tokens": 349,
+            "completion_tokens": 792
+          },
+          {
+            "model": "deepseek-ai/DeepSeek-V4-Pro",
+            "prompt_tokens": 573,
+            "completion_tokens": 518
+          },
+          {
+            "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+            "prompt_tokens": 358,
+            "completion_tokens": 759
+          },
+          {
+            "model": "deepseek-ai/DeepSeek-V4-Pro",
+            "prompt_tokens": 555,
+            "completion_tokens": 544
+          },
+          {
+            "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+            "prompt_tokens": 368,
+            "completion_tokens": 510
+          },
+          {
+            "model": "deepseek-ai/DeepSeek-V4-Pro",
+            "prompt_tokens": 567,
+            "completion_tokens": 641
+          }
+        ]
+      }
+    }
+  ],
+  "cleanup": {
+    "active_cloudvet_templates": [],
+    "active_sandboxes": []
+  },
+  "local_patch_applied": false,
+  "displayed_boot_seconds": {
+    "check": 1.58,
+    "fix": 1.78
+  }
+}

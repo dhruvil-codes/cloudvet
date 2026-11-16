@@ -3,6 +3,7 @@
 import json
 import re
 import shlex
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -127,7 +128,16 @@ def validate_patch(patch: str, workspace: Workspace, scope: str = "") -> set[str
     if not paths:
         raise ValueError("Patch contains no source changes")
     # Git's own parser catches extra GNU-style patches hidden after a valid git diff.
-    stats = git(workspace.root, "apply", "--numstat", "-z", "-", input_bytes=patch.encode())
+    # A project inside a larger repo still uses project-relative sandbox paths.
+    stats = git(
+        workspace.root,
+        "apply",
+        "--numstat",
+        "-z",
+        "-",
+        input_bytes=patch.encode(),
+        discover_parent=False,
+    )
     parsed_paths = {
         entry.split(b"\t", 2)[2].decode("utf-8") for entry in stats.split(b"\0") if entry
     }
@@ -143,8 +153,23 @@ def apply_locally(patch: str, workspace: Workspace, scope: str = "") -> None:
             raise ValueError(f"Local path changed since upload: {name}")
         if path.read_bytes() != workspace.files[name]:
             raise ValueError(f"Local edits changed since verification: {name}; rerun cloudvet fix")
-    git(workspace.root, "apply", "--check", "--whitespace=nowarn", "-", input_bytes=patch.encode())
-    git(workspace.root, "apply", "--whitespace=nowarn", "-", input_bytes=patch.encode())
+    git(
+        workspace.root,
+        "apply",
+        "--check",
+        "--whitespace=nowarn",
+        "-",
+        input_bytes=patch.encode(),
+        discover_parent=False,
+    )
+    git(
+        workspace.root,
+        "apply",
+        "--whitespace=nowarn",
+        "-",
+        input_bytes=patch.encode(),
+        discover_parent=False,
+    )
 
 
 class Healer:
@@ -160,6 +185,7 @@ class Healer:
         *,
         scope: str = "",
         max_attempts: int = 3,
+        on_stage: Callable[[str], None] | None = None,
     ) -> RepairResult:
         if not 1 <= max_attempts <= 3:
             raise ValueError("Repair attempts must be between 1 and 3")
@@ -171,6 +197,8 @@ class Healer:
                 errors.append("Timed-out tests require a longer command timeout, not an AI patch")
                 break
             try:
+                if on_stage:
+                    on_stage(f"Attempt {attempt}/{max_attempts} · triage failure")
                 diagnosis = Diagnosis.model_validate_json(
                     unfence(
                         self.models.complete(
@@ -207,6 +235,8 @@ class Healer:
                         break
                 if not context:
                     raise ValueError("Diagnosis did not identify an eligible uploaded source file")
+                if on_stage:
+                    on_stage(f"Attempt {attempt}/{max_attempts} · synthesize source patch")
                 patch = (
                     unfence(
                         self.models.complete(
@@ -247,6 +277,8 @@ class Healer:
                     raise RuntimeError("Cannot retrieve sandbox diff")
                 cumulative = before.stdout
                 validate_patch(cumulative, workspace, scope)
+                if on_stage:
+                    on_stage(f"Attempt {attempt}/{max_attempts} · verify {command}")
                 execution = self.manager.run_command(sandbox, command)
                 after = self.manager.run_command(sandbox, REMOTE_DIFF)
                 if not after.passed or after.stdout != cumulative:

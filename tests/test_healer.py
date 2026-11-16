@@ -127,6 +127,19 @@ def test_local_application_preserves_git_index(workspace):
     assert git(workspace.root, "diff", "--cached") == b""
 
 
+def test_local_patch_targets_project_subdirectory(repository):
+    from cloudvet.sandbox import Workspace
+
+    project = repository / "service"
+    project.mkdir()
+    original = (repository / "app.py").read_bytes()
+    (project / "app.py").write_bytes(original)
+    workspace = Workspace.capture(project)
+    apply_locally(PATCH, workspace)
+    assert "return a + b" in (project / "app.py").read_text()
+    assert (repository / "app.py").read_bytes() == original
+
+
 def test_local_edits_are_never_overwritten(workspace):
     (workspace.root / "app.py").write_text("# newer local edits\n")
     with pytest.raises(ValueError, match="Local edits"):

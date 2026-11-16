@@ -6,7 +6,7 @@
 
 Run a Git working tree's tests in disposable GMI AgentBox sandboxes. Diagnose failures with GMI MaaS, test a proposed repair in the sandbox, and review the diff before applying it locally. No local Docker daemon is required.
 
-Version 0.1.0 is an initial release. Live Node, Rust and Go fixtures passed on GMI; Python acceptance was blocked by a Cloudflare HTTP 403 at GMI's execution gateway during dependency installation. DeepSeek Flash diagnosis and V4-Pro patch synthesis were checked separately. See [verification notes](docs/VERIFICATION.md) for the remaining acceptance gaps. GMI's reported one-second median startup is a platform benchmark, not a cloudvet guarantee. First-time template builds can take minutes.
+Version 0.1.0 is an initial release. Live Node, Rust and Go fixtures passed on GMI, and a Rust repair was verified end to end with DeepSeek Flash and V4-Pro. Python acceptance was blocked by a Cloudflare HTTP 403 at GMI's execution gateway during dependency installation. See [verification notes](docs/VERIFICATION.md) for the measured results and remaining acceptance gaps. GMI's reported one-second median startup is a platform benchmark, not a cloudvet guarantee. First-time template builds can take minutes.
 
 ## Install
 
@@ -131,6 +131,31 @@ Increase the sandbox lifetime for dependency setup plus several model turns, for
 `fix` prints the initial and final test verdicts with execution durations. Completed repair
 attempts also print a MaaS table containing each call's model, prompt tokens and completion
 tokens. These counts are provider-reported; a setup failure stops before inference.
+
+### Terminal design
+
+Cards fit within 80 columns, use the terminal's own background, and separate stage progress
+from test verdicts. Interactive terminals get live spinners; redirected output gets static
+stage lines. `NO_COLOR` is respected. Non-Unicode streams use ASCII stage markers.
+Diffs have transparent highlighting, hunk headers and diff line numbers.
+
+The executive summary reports the observed toolchain, launch-to-running time, final test
+command duration, model usage and total workflow time. Hardware and dollar costs are not
+invented: the default sandbox SKU is CPU-only, and exact charges require GMI billing data.
+
+The included [Rust demo](demo_rust/) intentionally fails its zero-division test:
+
+```bash
+export CLOUDVET_IMAGE=docker.io/library/rust:1-bookworm
+export GMI_FIX_MODEL=deepseek-ai/DeepSeek-V4-Pro
+export CLOUDVET_TIMEOUT_SECONDS=900
+cd demo_rust
+cloudvet check
+cloudvet fix src/lib.rs
+```
+
+The recorded live run went from `2 passed, 1 failed` to `3 passed, 0 failed` inside AgentBox.
+The local-apply prompt was declined to preserve the broken demo for replay.
 
 ## Audit scope and Cloudflare attribution
 

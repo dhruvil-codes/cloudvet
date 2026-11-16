@@ -22,6 +22,7 @@ def test_lifecycle_sets_server_ttl_and_cleans_up(settings, sandbox):
         assert box is sandbox
         client.agents.create.return_value.launch.assert_called_once()
         assert client.agents.create.return_value.launch.call_args.kwargs["timeout_seconds"] == 300
+        assert manager.launch_details[box.id]["boot_seconds"] >= 0
     sandbox.delete.assert_called_once()
     client.agents.create.return_value.delete.assert_called_once()
 
